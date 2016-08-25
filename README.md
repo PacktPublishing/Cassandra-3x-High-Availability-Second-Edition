@@ -1,4 +1,4 @@
-# Cassandra-3.x-High-Availability-Second-Edition
+# Cassandra 3.x High Availability Second Edition
 
 only chapter 6 has code
 
