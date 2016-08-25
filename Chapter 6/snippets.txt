@@ -1,0 +1,148 @@
+private Cluster cluster; // defined at class level
+// you should only build the cluster once per app
+cluster = Cluster.builder()
+	.addContactPoints("10.10.10.1", "10.10.10.2", "10.10.10.3")
+	.build();
+
+----------------
+
+CREATE KEYSPACE contacts 
+	WITH REPLICATION = {
+		'class' : 'SimpleStrategy', 
+		'replication_factor' : 1
+};
+
+CREATE TABLE contact (
+	id UUID,
+	email TEXT PRIMARY KEY
+);
+
+----------------
+
+private Session session; // defined at class level
+session = cluster.connect("contacts");
+
+----------------
+
+String insert = "INSERT INTO contact (id, email) " +
+		"VALUES (" +
+		"bd297650-2885-11e4-8c21-0800200c9a66," +
+		"'contact@example.com' " +
+	");";
+session.execute(insert);
+
+----------------
+
+String insert = "INSERT INTO contacts.contact (id, email) " +
+			"VALUES (?,?);";
+PreparedStatement stmt = session.prepare(insert);
+BoundStatement boundInsert = stmt.bind(
+	UUID.fromString("bd297650-2885-11e4-8c21-0800200c9a66"),
+	"contact@example.com"
+);
+session.execute(boundInsert);
+
+----------------
+
+BatchStatement batch = new BatchStatement();
+batch.add(stmt.bind(
+	UUID.fromString("bd297650-2885-11e4-8c21-0800200c9a66"),
+	"contact@example.com"
+));
+batch.add(stmt.bind(
+	UUID.fromString("a012a000-2899-11e4-8c21-0800200c9a66"),
+	"othercontact@example.com"
+));
+session.execute(batch);
+
+----------------
+
+String query = "SELECT * FROM contact " +
+	"WHERE id = bd297650-2885-11e4-8c21-0800200c9a66;";
+ResultSetFuture f = session.executeAsync(query);
+ResultSet rs = f.getUninterruptibly();
+
+----------------
+
+String query = "SELECT * FROM contact WHERE id = ?;";
+BoundStatement q1 = session.prepare(query).bind(
+	UUID.fromString("bd297650-2885-11e4-8c21-0800200c9a66")
+);
+BoundStatement q2 = session.prepare(query).bind(
+	UUID.fromString("a012a000-2899-11e4-8c21-0800200c9a66")
+);
+ResultSetFuture f1 = session.executeAsync(q1);
+ResultSetFuture f2 = session.executeAsync(q2);
+
+try {
+	ResultSet rs1 = f1.getUninterruptibly(5, TimeUnit.SECONDS);
+	ResultSet rs2 = f2.getUninterruptibly(5, TimeUnit.SECONDS);
+	// do something with results
+} catch (Exception e) {
+	// handle exception
+}
+
+----------------
+
+Future<List<ResultSet>>future = Futures.allAsList(
+	session.executeAsync(q1),
+	session.executeAsync(q2)
+);
+try {
+	List<ResultSet> results = future.get(5, TimeUnit.SECONDS);
+	// do something with results
+} catch (Exception e) {
+	// handle exception
+}
+
+----------------
+
+private Cluster cluster; // defined at class level
+cluster = cluster.builder()
+	.addContactPoints("10.10.10.1", "10.10.10.2", "10.10.10.3")
+	.withRetryPolicy(DowngradingConsistencyRetryPolicy.INSTANCE)
+	.build();
+
+----------------
+
+Statement stmt = // create statement
+session.execute(stmt.withRetryPolicy(
+	DowngradingConsistencyRetryPolicy.INSTANCE));
+
+----------------
+
+private Cluster cluster; // defined at class level
+LoadBalancingPolicy policy = 
+  new TokenAwarePolicy(DCAwareRoundRobinPolicy.builder().build());
+cluster = cluster.builder()
+	.addContactPoints("10.10.10.1", "10.10.10.2", "10.10.10.3")
+	.withLoadBalancingPolicy(policy)
+	.build();
+
+----------------
+
+// defined at class level
+private String localDC = "DC1";
+private ConsistencyLevel defaultCL = 
+	ConsistencyLevel.LOCAL_QUORUM;
+private Cluster cluster;
+
+LoadBalancingPolicy dcPolicy =
+	DCAwareRoundRobinPolicy.builder()
+		.withLocalDc(localDC)
+		.withUsedHostsPerRemoteDc(2)
+		.build();
+
+// initialized once per application
+cluster = cluster.builder()
+	.addContactPoints("10.10.10.1", "10.10.10.2", "10.10.10.3")
+	.withRetryPolicy(new LoggingRetryPolicy(
+       DowngradingConsistencyRetryPolicy.INSTANCE))
+	.withLoadBalancingPolicy(new TokenAwarePolicy(dcPolicy))
+	.withQueryOptions(
+    new QueryOptions().setConsistencyLevel(defaultCL))
+	.build();
+
+----------------
+
+
